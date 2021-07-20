@@ -1,0 +1,84 @@
+# This workflow will build a docker container, publish it to Google Container Registry, and deploy it to GKE when a release is created
+#
+# To configure this workflow:
+#
+# 1. Ensure that your repository contains the necessary configuration for your Google Kubernetes Engine cluster, including deployment.yml, kustomization.yml, service.yml, etc.
+#
+# 2. Set up secrets in your workspace: GKE_PROJECT with the name of the project, GKE_EMAIL with the service account email, GKE_KEY with the Base64 encoded JSON service account key (https://github.com/GoogleCloudPlatform/github-actions/tree/docs/service-account-key/setup-gcloud#inputs).
+#
+# 3. Change the values for the GKE_ZONE, GKE_CLUSTER, IMAGE, REGISTRY_HOSTNAME and DEPLOYMENT_NAME environment variables (below).
+
+name: Build and Deploy to GKE Dev
+
+on:
+  push:
+    branches:
+      - cicd/
+      - cicd/*
+  pull_request:
+    types: [closed]
+    branches:
+      - develop
+
+# Environment variables available to all jobs and steps in this workflow
+env:
+  PROJECT: ${{ secrets.PROJECT }}
+  GITHUB_SHA: ${{ github.sha }}
+  DEPLOYMENT_ENV: "develop"
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+  DOCKERHUB_SPACE: "hieuphq"
+  DB_NAME: "question_dev"
+
+jobs:
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
+    # if: github.event.pull_request.merged
+    env:
+      GOBIN: ${{ github.workspace }}
+      GO111MODULE: off
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      # if: github.event.pull_request.merged
+      uses: actions/checkout@v2
+    
+    # Build & Push the Docker image
+    - name:  Build
+      run: |
+        docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_TOKEN
+        docker build --build-arg DEFAULT_PORT=3000 -t $DOCKERHUB_SPACE/$PROJECT:$DEPLOYMENT_ENV .
+        docker push $DOCKERHUB_SPACE/$PROJECT:$DEPLOYMENT_ENV
+    
+    # Pull and deploy
+    - name: executing remote ssh commands using password
+      uses: appleboy/ssh-action@master
+      env:
+        ENV: "develop"
+        DB_HOST: ${{secrets.DB_HOST}}
+        DB_PORT: ${{secrets.DB_PORT}}
+        DB_USER: ${{secrets.DB_USER}}
+        DB_PASS: ${{secrets.DB_PASS}}
+        DB_NAME: "question_dev"
+        PROJECT: ${{secrets.PROJECT}}
+        DB_SSL_MODE: "disable"
+        VIRTUAL_HOST: "api.kalimtab.com"
+        DEPLOYMENT_ENV: "develop"
+        DOCKERHUB_SPACE: "hieuphq"
+        CONTAINER_NAME: "question_develop"
+      with:
+        host: "51.79.173.200"
+        username: "core"
+        key: ${{ secrets.VPS_KEY }}
+        envs: ENV,DB_HOST,DB_PORT,DB_USER,DB_PASS,DB_NAME,DB_SSL_MODE,VIRTUAL_HOST,PROJECT,DEPLOYMENT_ENV,DOCKERHUB_SPACE,CONTAINER_NAME
+        script: |
+          mkdir -p ~/$PROJECT/$DEPLOYMENT_ENV
+          cd ~/$PROJECT/$DEPLOYMENT_ENV
+          echo -e "ENV=$ENV\nDB_HOST=$DB_HOST\nDB_PORT=$DB_PORT\nDB_USER=$DB_USER\nDB_PASS=$DB_PASS\nDB_NAME=$DB_NAME\nDB_SSL_MODE=$DB_SSL_MODE\nVIRTUAL_HOST=$VIRTUAL_HOST" > ~/$PROJECT/$DEPLOYMENT_ENV/env
+          docker pull $DOCKERHUB_SPACE/$PROJECT:$DEPLOYMENT_ENV
+          docker rm -f $(docker ps -aq --filter name=$CONTAINER_NAME)
+          docker run --name $CONTAINER_NAME -d --network=nginx-proxy -p 8001:3000 --env-file ~/$PROJECT/$DEPLOYMENT_ENV/env $DOCKERHUB_SPACE/$PROJECT:$DEPLOYMENT_ENV
+
+    - name: Migrate DB
+      run: |
+        echo "migrate database"
