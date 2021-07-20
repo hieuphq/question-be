@@ -1,0 +1,32 @@
+name: Commitlint & Unit test
+on: 
+  push:
+    branches:
+      - cicd/
+      - cicd/*
+      - feature/*
+      - hotfix/*
+      - fixbug/*
+      - chore/*
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+      with:
+        path: ./src/github.com/${{ github.repository }}
+
+    - name: Set up Go 1.16
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.16
+
+    - name: Unit test
+      run: |
+        cd src/github.com/${{ github.repository }}
+        go mod vendor
+        make test
