@@ -89,5 +89,6 @@ func (a *App) setupRouter() *gin.Engine {
 	r.GET("/healthz", h.Healthz)
 	r.POST("/topics", h.CreateTopic)
 	r.GET("/topics/:code", h.GetTopic)
+	r.GET("/hoster", h.GetHoster)
 	return r
 }
