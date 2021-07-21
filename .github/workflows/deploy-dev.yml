@@ -25,6 +25,10 @@ env:
   DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
   DOCKERHUB_SPACE: "hieuphq"
   DB_NAME: "question_dev"
+  HOST: "51.79.173.200"
+  DB_PORT: ${{secrets.DB_PORT}}
+  DB_USER: ${{secrets.DB_USER}}
+  DB_PASS: ${{secrets.DB_PASS}}
 
 jobs:
   setup-build-publish-deploy:
@@ -45,7 +49,7 @@ jobs:
         docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_TOKEN
         docker build --build-arg DEFAULT_PORT=3000 -t $DOCKERHUB_SPACE/$PROJECT:$DEPLOYMENT_ENV .
         docker push $DOCKERHUB_SPACE/$PROJECT:$DEPLOYMENT_ENV
-    
+
     # Pull and deploy
     - name: executing remote ssh commands using password
       uses: appleboy/ssh-action@master
@@ -77,4 +81,7 @@ jobs:
 
     - name: Migrate DB
       run: |
-        echo "migrate database"
+        echo -e "local:\n  dialect: postgres\n  datasource: host=$HOST dbname=$DB_NAME port=$DB_PORT password=$DB_PASS user=$DB_USER sslmode=disable\n  dir: migrations/postgres/schema\n  table: migrations" > dbconfig.yml
+        go get -v github.com/rubenv/sql-migrate/...
+        ./sql-migrate up -env=local
+        echo "migrated database"

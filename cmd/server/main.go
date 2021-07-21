@@ -11,19 +11,31 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/hieuphq/question-be/pkg/config"
+	"github.com/hieuphq/question-be/pkg/handler"
+	"github.com/hieuphq/question-be/pkg/service/repo"
+	"github.com/hieuphq/question-be/pkg/service/repo/pg"
+
+	_ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
 // App api app instance
 type App struct {
-	l   *log.Logger
-	cfg config.Config
+	l     *log.Logger
+	cfg   config.Config
+	store repo.Store
 }
 
 func main() {
+	cfg := config.LoadConfig()
+	s, close := pg.NewPostgresStore(&cfg)
+	defer close()
+
 	a := App{
-		l:   log.Default(),
-		cfg: config.LoadConfig(),
+		l:     log.Default(),
+		cfg:   cfg,
+		store: s,
 	}
+
 	router := a.setupRouter()
 
 	quit := make(chan os.Signal)
@@ -71,26 +83,11 @@ func (a *App) setupRouter() *gin.Engine {
 		},
 	))
 
-	h := Handler{
-		log: log.Default(),
-		cfg: a.cfg,
-	}
+	h := handler.New(a.cfg, a.store)
 
 	// handlers
 	r.GET("/healthz", h.Healthz)
+	r.POST("/topics", h.CreateTopic)
+	r.GET("/topics/:code", h.GetTopic)
 	return r
-}
-
-// Handler for app
-type Handler struct {
-	log *log.Logger
-	cfg config.Config
-}
-
-// Healthz handler
-// Return "OK"
-func (h *Handler) Healthz(c *gin.Context) {
-	c.Header("Content-Type", "text/plain")
-	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Write([]byte("OK"))
 }
