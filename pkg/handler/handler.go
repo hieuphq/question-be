@@ -37,4 +37,13 @@ func (h *Handler) Healthz(c *gin.Context) {
 	c.Header("Content-Type", "text/plain")
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Write([]byte("OK"))
+
+}
+
+// GetHoster handler
+// Return "Hoster"
+func (h *Handler) GetHoster(c *gin.Context) {
+	c.Header("Content-Type", "text/plain")
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.Write([]byte("Hoster is anonymous"))
 }
